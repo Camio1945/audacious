@@ -26,6 +26,7 @@
 #include <libaudcore/i18n.h>
 #include <libaudcore/interface.h>
 #include <libaudcore/playlist.h>
+#include <libaudcore/plugins.h>
 #include <libaudcore/runtime.h>
 
 #include <libaudqt/libaudqt.h>
@@ -34,6 +35,23 @@ namespace audqt
 {
 
 static aud::array<FileMode, QPointer<QFileDialog>> s_dialogs;
+
+static QStringList get_audio_filters()
+{
+    QStringList filters;
+
+    /* collect all audio extensions supported by enabled input plugins */
+    QStringList exts;
+    for (const char * ext : aud_plugin_get_supported_extensions())
+        exts.append(QString("*.%1").arg(ext));
+
+    if (exts.isEmpty())
+        return filters;
+
+    filters.append(QString(_("Audio Files")).append(" (%1)").arg(exts.join(' ')));
+    filters.append(QString(_("All Files")).append(" (*)"));
+    return filters;
+}
 
 static void import_playlist(Playlist playlist, const char * filename)
 {
@@ -124,6 +142,14 @@ EXPORT void fileopener_show(FileMode mode)
         dialog->setLabelText(QFileDialog::Accept, _(labels[mode]));
         dialog->setLabelText(QFileDialog::Reject, _("Cancel"));
         dialog->setWindowRole("file-dialog");
+
+        /* set audio file filter for Open/Add file dialogs */
+        if (mode == FileMode::Open || mode == FileMode::Add)
+        {
+            auto filters = get_audio_filters();
+            if (!filters.isEmpty())
+                dialog->setNameFilters(filters);
+        }
 
         auto playlist = Playlist::active_playlist();
 
