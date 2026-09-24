@@ -23,8 +23,14 @@
 #include <QPushButton>
 #include <QScreen>
 #include <QStyleFactory>
+#include <QTimer>
 #include <QTranslator>
 #include <QVBoxLayout>
+
+#ifdef _WIN32
+#  define NOMINMAX
+#  include <windows.h>
+#endif
 
 #include <libaudcore/audstrings.h>
 #include <libaudcore/i18n.h>
@@ -109,19 +115,41 @@ void set_icon_theme()
     if (!paths.contains(path))
         QIcon::setFallbackSearchPaths(paths << path);
 
-    QIcon icon = QIcon::fromTheme("audacious");
 #if defined(_WIN32)
-    // fromTheme("audacious") returns null on Windows because there is no
-    // freedesktop icon theme. Fall back to the bundled .ico file.
-    if (icon.isNull())
+    // NEVER use QIcon::fromTheme() on Windows. It may return a non-null
+    // but wrong icon (Qt's fallback theme has an "audacious" entry that
+    // is not Audacious's own icon), overriding the PE-embedded one.
+    // Load directly from the .ico file next to the exe.
+    QString icoPath = QCoreApplication::applicationDirPath() + "/audacious.ico";
+    if (QFile::exists(icoPath))
     {
-        QString icoPath = QCoreApplication::applicationDirPath() + "/audacious.ico";
-        if (QFile::exists(icoPath))
-            icon = QIcon(icoPath);
+        qApp->setWindowIcon(QIcon(icoPath));
+        // Qt's setWindowIcon() doesn't always propagate to real Win32
+        // HWNDs, especially when called before the main window exists.
+        // So after the event loop starts and windows are created, force
+        // WM_SETICON on every top-level widget.
+        QTimer::singleShot(100, [icoPath]()
+        {
+            HICON hIconBig = (HICON)LoadImageW(nullptr, (LPCWSTR)icoPath.utf16(),
+                IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
+            HICON hIconSm = (HICON)LoadImageW(nullptr, (LPCWSTR)icoPath.utf16(),
+                IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_LOADFROMFILE);
+            if (!hIconBig && !hIconSm) return;
+            for (QWidget *w : QApplication::topLevelWidgets())
+            {
+                if (!w->isWindow()) continue;
+                HWND hwnd = (HWND)w->winId();
+                if (!hwnd) continue;
+                if (hIconBig) SendMessageW(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIconBig);
+                if (hIconSm)  SendMessageW(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIconSm);
+            }
+        });
     }
-#endif
+#else
+    QIcon icon = QIcon::fromTheme("audacious");
     if (!icon.isNull())
         qApp->setWindowIcon(icon);
+#endif
 }
 
 EXPORT void init()
@@ -356,5 +384,6 @@ EXPORT QString translate_str(const char * str, const char * domain)
     /* translate the GTK+ accelerator (_) into a Qt accelerator (&) */
     return QString(dgettext(domain, str)).replace('_', '&');
 }
+
 
 } // namespace audqt
