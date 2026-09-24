@@ -91,8 +91,8 @@ Section "Audacious" InstallSection
   WriteRegDWORD HKLM "${UNINST_KEY}" "NoRepair" 1
 
   ; estimate installed size
-  SectionGetSize InstallSection $0
-  WriteRegDWORD HKLM "${UNINST_KEY}" "EstimatedSize" $0
+  ; SectionGetSize InstallSection $0  ; NSIS v3.12 compat: needs section index, not name
+  ; WriteRegDWORD HKLM "${UNINST_KEY}" "EstimatedSize" $0  ; skipped
 
   WriteUninstaller ${UNINSTALLER}
 
