@@ -238,6 +238,7 @@ endif
 install_data('AUTHORS', 'COPYING')
 install_data('audacious.desktop', install_dir: install_desktoppath)
 install_data('audacious.metainfo.xml', install_dir: install_metainfo_path)
+install_data('images/audacious.ico', install_dir: install_bindir)
 
 
 pkg = import('pkgconfig')

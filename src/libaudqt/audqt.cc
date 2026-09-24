@@ -109,7 +109,19 @@ void set_icon_theme()
     if (!paths.contains(path))
         QIcon::setFallbackSearchPaths(paths << path);
 
-    qApp->setWindowIcon(QIcon::fromTheme("audacious"));
+    QIcon icon = QIcon::fromTheme("audacious");
+#if defined(_WIN32)
+    // fromTheme("audacious") returns null on Windows because there is no
+    // freedesktop icon theme. Fall back to the bundled .ico file.
+    if (icon.isNull())
+    {
+        QString icoPath = QCoreApplication::applicationDirPath() + "/audacious.ico";
+        if (QFile::exists(icoPath))
+            icon = QIcon(icoPath);
+    }
+#endif
+    if (!icon.isNull())
+        qApp->setWindowIcon(icon);
 }
 
 EXPORT void init()
