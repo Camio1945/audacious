@@ -104,6 +104,8 @@ conf.set_quoted('COPYRIGHT', copyright)
 conf.set_quoted('PACKAGE', meson.project_name())
 conf.set_quoted('VERSION', meson.project_version())
 conf.set('PACKAGE_VERSION', meson.project_version())
+conf.set('INSTALL_PREFIX', get_option('prefix'))
+conf.set('NSIS_SRCDIR', meson.project_source_root())
 if host_machine.endian() == 'big'
   conf.set10('WORDS_BIGENDIAN', true)
   conf.set10('BIGENDIAN', true)
