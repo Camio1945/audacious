@@ -89,20 +89,50 @@ cd /d/git/miscellaneous/audacious/release-qt/bin
 
 ---
 
+### 构建完成后你能拿到的产物
+
+| 你想要的东西 | 在哪 |
+|---|---|
+| **直接运行** | `D:\git\miscellaneous\audacious\release-qt\bin\audacious.exe` |
+| **便携版文件夹** | 整个 `D:\git\miscellaneous\audacious\release-qt\` 目录（拷到 U 盘也能跑） |
+| **NSIS 安装包** | 用下面的命令生成 → `audacious-4.6.2-win32.exe` |
+| **便携版 zip** | 用下面的命令生成 → `audacious-4.6.2-portable.zip` |
+
+> 📦 `release-qt\` 目录结构：
+> ```
+> release-qt\
+> ├── bin\
+> │   ├── audacious.exe
+> │   ├── audacious.ico
+> │   ├── Qt6Core.dll ...  (14 个 Qt6 dll)
+> │   └── libaudcore-6.dll, libaudqt-4.dll
+> ├── lib\
+> │   └── audacious\
+> │       ├── General\qtui.dll    ← Qt UI 插件（没有它就是黑窗口）
+> │       ├── Input\*              ← 解码器插件
+> │       ├── Effect\*             ← 音效插件
+> │       └── ...
+> ├── include\                     ← C 头文件（给第三方开发用）
+> └── share\                       ← 图标、翻译、metainfo
+> ```
+
+---
+
 ### 制作 NSIS 安装包
 
 ```powershell
-# PowerShell（需要 pacman -S mingw-w64-ucrt-x86_64-nsis）
+# 需要先: pacman -S mingw-w64-ucrt-x86_64-nsis
 cd D:\git\miscellaneous\audacious
-meson compile -C build   # 先生成 win32/audacious.nsi
+meson compile -C build                    # 先生成 win32/audacious.nsi
 & "$msysBin\makensis.exe" -V3 build\win32\audacious.nsi
-# 输出: audacious-4.6.2-win32.exe
+# 输出在: D:\git\miscellaneous\audacious\audacious-4.6.2-win32.exe
 ```
 
 ### 制作便携版 zip
 
 ```powershell
 Compress-Archive -Path "$prefix\*" -DestinationPath "audacious-4.6.2-portable.zip"
+# 输出在: 当前目录\audacious-4.6.2-portable.zip
 ```
 
 ---
