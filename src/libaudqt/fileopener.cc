@@ -40,13 +40,15 @@ static QStringList get_audio_filters()
 {
     QStringList filters;
 
-    /* collect all audio extensions supported by enabled input plugins */
-    QStringList exts;
-    for (const char * ext : aud_plugin_get_supported_extensions())
-        exts.append(QString("*.%1").arg(ext));
+    /* Top 10 most common audio extensions. Hard-coded to keep the
+     * file-dialog "Files of type" dropdown compact. */
+    static const char * const common[] = {
+        "mp3", "wav", "flac", "ogg", "opus", "m4a", "aac", "wma", "ape", "mid"
+    };
 
-    if (exts.isEmpty())
-        return filters;
+    QStringList exts;
+    for (const char * e : common)
+        exts.append(QString("*.%1").arg(e));
 
     filters.append(QString(_("Audio Files")).append(" (%1)").arg(exts.join(' ')));
     filters.append(QString(_("All Files")).append(" (*)"));
