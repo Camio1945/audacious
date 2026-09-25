@@ -1,4 +1,4 @@
-# Audacious [v4.6.2]
+# Audacious [v4.6.3]
 
 ## 快速打包与运行（Windows MSYS2 UCRT64）
 
@@ -117,7 +117,7 @@ Write-Host "===== 生成 NSIS 安装包 ====="
 cd $audRoot
 meson compile -C build 2>&1 | Select-Object -Last 1
 & "$msysBin\makensis.exe" -V3 "build\win32\audacious.nsi"
-$installer = "$audRoot\audacious-4.6.2-win32.exe"
+$installer = "$audRoot\audacious-4.6.3-win32.exe"
 if (Test-Path $installer) {
     Write-Host "✅ 安装包: $installer ($([math]::Round((Get-Item $installer).Length/1MB, 1)) MB)"
 }
@@ -125,8 +125,8 @@ if (Test-Path $installer) {
 # ===== 8. 做便携版 zip（可选）=====
 Write-Host ""
 Write-Host "===== 生成便携版 zip ====="
-Compress-Archive -Path "$prefix\*" -DestinationPath "$audRoot\audacious-4.6.2-portable.zip" -Force
-Write-Host "✅ 便携版: $audRoot\audacious-4.6.2-portable.zip"
+Compress-Archive -Path "$prefix\*" -DestinationPath "$audRoot\audacious-4.6.3-portable.zip" -Force
+Write-Host "✅ 便携版: $audRoot\audacious-4.6.3-portable.zip"
 ```
 
 > 💡 **为什么要覆盖 PATH 而不是追加？** 你的系统 PATH 里很可能有 `F:\gstreamer\1.0\msvc_x86_64\bin`（MSVC 版的 glib/pcre2 等）。追加的话 GCC linker 在 `meson setup` 阶段会优先找到 MSVC 版（不带 `lib` 前缀），导致 audacious.exe 的 DLL 导入表写成 `glib-2.0-0.dll` 而不是正确的 `libglib-2.0-0.dll`。覆盖成干净 PATH 就不会有这个问题。
@@ -166,7 +166,7 @@ ldd audacious.exe | grep "not found"    # 应该输出 0 行
 # 做安装包
 cd /d/git/miscellaneous/audacious
 makensis -V3 build/win32/audacious.nsi
-# 产物: audacious-4.6.2-win32.exe
+# 产物: audacious-4.6.3-win32.exe
 ```
 
 ---
@@ -177,8 +177,8 @@ makensis -V3 build/win32/audacious.nsi
 |---|---|---|
 | **直接运行** | `release-qt\bin\audacious.exe` | — |
 | **便携版文件夹** | 整个 `release-qt\` 目录 | ~520 MB |
-| **NSIS 安装包** | `audacious-4.6.2-win32.exe` | ~116 MB（lzma 压缩） |
-| **便携版 zip** | `audacious-4.6.2-portable.zip` | 比安装包稍大 |
+| **NSIS 安装包** | `audacious-4.6.3-win32.exe` | ~116 MB（lzma 压缩） |
+| **便携版 zip** | `audacious-4.6.3-portable.zip` | 比安装包稍大 |
 
 > 📦 `release-qt\` 目录结构（自包含，拷到任何 Windows 电脑都能跑）：
 > ```
@@ -220,7 +220,7 @@ $env:Path = "$msysBin;" + $env:Path   # 做安装包只需 makensis，不需要�
 cd D:\git\miscellaneous\audacious
 meson compile -C build                # 生成 win32/audacious.nsi 并安装所有文件到 release-qt
 & "$msysBin\makensis.exe" -V3 "build\win32\audacious.nsi"
-# 输出在: D:\git\miscellaneous\audacious\build\win32\audacious-4.6.2-win32.exe
+# 输出在: D:\git\miscellaneous\audacious\build\win32\audacious-4.6.3-win32.exe
 # makensis 会自动处理 OutFile 路径
 ```
 
@@ -265,7 +265,7 @@ $env:Path = "D:\git\miscellaneous\audacious\release-qt\bin;C:\Windows\System32;C
 .\release-qt\bin\audacious.exe
 
 # 4. 用 7z 查 NSIS 安装包内容
-& "C:\Program Files\7-Zip\7z.exe" l "audacious-4.6.2-win32.exe" | Select-String "glib|libstdc|platforms|qwindows"
+& "C:\Program Files\7-Zip\7z.exe" l "audacious-4.6.3-win32.exe" | Select-String "glib|libstdc|platforms|qwindows"
 
 # 5. PowerShell 脚本一步步跑，不要跳过任何一步
 ```
