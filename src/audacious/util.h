@@ -25,6 +25,12 @@
 #ifdef _WIN32
 Index<String> get_argv_utf8();
 int exec_argv0();
+
+/* Single-instance support (there is no D-Bus session bus on Windows).
+ * Returns true if this is the first running instance for the given instance
+ * number. Returns false if another instance is already running, in which case
+ * the existing window is brought to the front and the caller should exit. */
+bool win32_claim_single_instance(int instance);
 #endif
 
 #endif /* AUDACIOUS_UTIL_H */

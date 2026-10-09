@@ -393,6 +393,23 @@ int main(int argc, char ** argv)
         return EXIT_SUCCESS;
     }
 
+#ifdef _WIN32
+    /* Windows has no D-Bus session bus, so the single-instance handling in
+     * dbus-server.cc is unavailable.  For a plain launch (no files and no
+     * command-line actions) make sure only one copy runs: a repeated launch --
+     * e.g. from the keyboard's media key -- just raises the existing window
+     * instead of opening another one.  Explicit actions and files are left
+     * untouched so that e.g. "audacious.exe song.mp3" still works. */
+    bool plain_launch = !filenames.len() && !options.play && !options.pause &&
+                        !options.play_pause && !options.stop && !options.rew &&
+                        !options.fwd && !options.enqueue &&
+                        !options.enqueue_to_temp && !options.show_jump_box &&
+                        !options.headless && !options.quit_after_play;
+
+    if (plain_launch && !win32_claim_single_instance(aud_get_instance()))
+        return EXIT_SUCCESS;
+#endif
+
 #ifdef USE_DBUS
     do_remote(); /* may exit */
 #endif
