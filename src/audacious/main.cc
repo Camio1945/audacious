@@ -395,19 +395,31 @@ int main(int argc, char ** argv)
 
 #ifdef _WIN32
     /* Windows has no D-Bus session bus, so the single-instance handling in
-     * dbus-server.cc is unavailable.  For a plain launch (no files and no
-     * command-line actions) make sure only one copy runs: a repeated launch --
-     * e.g. from the keyboard's media key -- just raises the existing window
-     * instead of opening another one.  Explicit actions and files are left
-     * untouched so that e.g. "audacious.exe song.mp3" still works. */
-    bool plain_launch = !filenames.len() && !options.play && !options.pause &&
-                        !options.play_pause && !options.stop && !options.rew &&
-                        !options.fwd && !options.enqueue &&
-                        !options.enqueue_to_temp && !options.show_jump_box &&
-                        !options.headless && !options.quit_after_play;
+     * dbus-server.cc is unavailable.  Enforce it ourselves: the first copy owns
+     * a named mutex and a hidden IPC window, and every later launch -- whether
+     * from the keyboard's media key or from double-clicking an audio file --
+     * hands its command line over to that copy and exits, so that only one
+     * Audacious window ever exists. */
+    bool single_instance = !options.headless;
 
-    if (plain_launch && !win32_claim_single_instance(aud_get_instance()))
+    if (single_instance && !win32_claim_single_instance(aud_get_instance()))
+    {
+        Index<String> uris;
+        for (auto & item : filenames)
+            uris.append(item.filename);
+
+        auto mode = options.enqueue_to_temp ? Win32IpcMode::EnqueueToTemp
+                    : options.enqueue        ? Win32IpcMode::Enqueue
+                                             : Win32IpcMode::Open;
+
+        if (!win32_ipc_send(aud_get_instance(), mode, uris))
+        {
+            /* The running copy could not be reached; at least raise it. */
+            win32_activate_existing_instance();
+        }
+
         return EXIT_SUCCESS;
+    }
 #endif
 
 #ifdef USE_DBUS
@@ -422,6 +434,11 @@ int main(int argc, char ** argv)
 
     initted = true;
     aud_init();
+
+#ifdef _WIN32
+    if (single_instance)
+        win32_ipc_start(aud_get_instance());
+#endif
 
     do_commands();
 
@@ -441,6 +458,11 @@ int main(int argc, char ** argv)
         hook_dissociate("playlist add complete", (HookFunction)maybe_quit);
         hook_dissociate("quit", (HookFunction)aud_quit);
     }
+
+#ifdef _WIN32
+    if (single_instance)
+        win32_ipc_stop();
+#endif
 
 #ifdef USE_DBUS
     dbus_server_cleanup();

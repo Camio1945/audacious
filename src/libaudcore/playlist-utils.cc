@@ -345,19 +345,39 @@ static void load_playlists_real()
         order_path, VFSReadOptions(VFS_APPEND_NULL | VFS_IGNORE_MISSING));
     auto order = str_list_to_index(order_string.begin(), " \n");
 
+    /* Index of the next playlist to insert.  Playlists whose file has gone
+     * missing are skipped, so this must be tracked separately from "i". */
+    int index = count;
+
     for (int i = 0; i < order.len(); i++)
     {
         const char * number = order[i];
 
         StringBuf path =
             filename_build({folder, str_concat({number, ".audpl"})});
+        bool is_xspf = false;
+
         if (!g_file_test(path, G_FILE_TEST_EXISTS))
-            path = filename_build({folder, str_concat({number, ".xspf"})});
+        {
+            StringBuf xspf_path =
+                filename_build({folder, str_concat({number, ".xspf"})});
+
+            /* Neither file exists: the playlist was removed from outside
+             * Audacious.  Skip it -- blindly opening the .xspf name would
+             * pop up a "No such file or directory" error dialog on every
+             * startup.  save_playlists_real() drops the stale ID from
+             * "order" on the next save. */
+            if (!g_file_test(xspf_path, G_FILE_TEST_EXISTS))
+                continue;
+
+            path = std::move(xspf_path);
+            is_xspf = true;
+        }
 
         PlaylistEx playlist =
-            PlaylistEx::insert_with_stamp(count + i, atoi(number));
+            PlaylistEx::insert_with_stamp(index++, atoi(number));
         playlist.insert_flat_playlist(filename_to_uri(path));
-        playlist.set_modified(g_str_has_suffix(path, ".xspf"));
+        playlist.set_modified(is_xspf);
     }
 
     if (!Playlist::n_playlists())

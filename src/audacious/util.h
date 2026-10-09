@@ -26,11 +26,33 @@
 Index<String> get_argv_utf8();
 int exec_argv0();
 
-/* Single-instance support (there is no D-Bus session bus on Windows).
- * Returns true if this is the first running instance for the given instance
- * number. Returns false if another instance is already running, in which case
- * the existing window is brought to the front and the caller should exit. */
+/* Single-instance support.  There is no D-Bus session bus on Windows, so the
+ * first instance owns a named mutex and a hidden IPC window; further launches
+ * hand their files over to it instead of starting a second process. */
+
+/* Takes ownership of the mutex for the given instance number.  Returns true if
+ * this is the first (primary) instance, false if another copy is running. */
 bool win32_claim_single_instance(int instance);
+
+/* Brings the already-running instance's main window to the front. */
+void win32_activate_existing_instance();
+
+enum class Win32IpcMode
+{
+    Open,
+    Enqueue,
+    EnqueueToTemp
+};
+
+/* Primary instance only: creates the hidden window that receives forwarded
+ * command lines. */
+void win32_ipc_start(int instance);
+void win32_ipc_stop();
+
+/* Asks the running instance to open/enqueue "files" (URIs) and show its main
+ * window.  Returns false if the running instance could not be reached. */
+bool win32_ipc_send(int instance, Win32IpcMode mode,
+                    const Index<String> & files);
 #endif
 
 #endif /* AUDACIOUS_UTIL_H */

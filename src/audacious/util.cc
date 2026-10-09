@@ -23,9 +23,17 @@
 #include <windows.h>
 
 #include <new>
+#include <stdint.h>
 #include <string>
 #include <string.h>
+#include <vector>
 #include <wchar.h>
+
+#include <libaudcore/drct.h>
+#include <libaudcore/interface.h>
+#include <libaudcore/mainloop.h>
+#include <libaudcore/runtime.h>
+#include <libaudcore/tuple.h>
 
 #ifdef WORDS_BIGENDIAN
 #define UTF16_NATIVE "UTF-16BE"
@@ -87,8 +95,7 @@ HANDLE single_instance_mutex = nullptr;
  * executable as we are (compared by base file name). */
 static bool is_same_executable(DWORD pid, const wchar_t * self_name)
 {
-    HANDLE proc =
-        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     if (!proc)
         return false;
 
@@ -105,12 +112,49 @@ static bool is_same_executable(DWORD pid, const wchar_t * self_name)
     return _wcsicmp(base, self_name) == 0;
 }
 
+/* Brings a window to the front without altering its state.  A plain SW_SHOW
+ * would un-maximize a maximized window, so pick the show command that matches
+ * the current placement: a maximized window stays maximized, a minimized one
+ * is restored, and a normal one is simply shown. */
+static void raise_window(HWND hwnd)
+{
+    if (!hwnd)
+        return;
+
+    WINDOWPLACEMENT wp;
+    wp.length = sizeof(WINDOWPLACEMENT);
+    GetWindowPlacement(hwnd, &wp);
+
+    if (wp.showCmd == SW_SHOWMINIMIZED)
+        ShowWindow(hwnd, SW_RESTORE);
+    else if (wp.showCmd == SW_SHOWMAXIMIZED)
+        ShowWindow(hwnd, SW_SHOWMAXIMIZED);
+    else
+        ShowWindow(hwnd, SW_SHOW);
+
+    /* SetForegroundWindow() is only permitted for the foreground process, so
+     * briefly attach our input queue to the current foreground thread. */
+    HWND foreground = GetForegroundWindow();
+    DWORD foreground_thread =
+        foreground ? GetWindowThreadProcessId(foreground, nullptr) : 0;
+    DWORD current_thread = GetCurrentThreadId();
+
+    bool attached = foreground_thread && foreground_thread != current_thread &&
+                    AttachThreadInput(current_thread, foreground_thread, TRUE);
+
+    SetForegroundWindow(hwnd);
+    BringWindowToTop(hwnd);
+
+    if (attached)
+        AttachThreadInput(current_thread, foreground_thread, FALSE);
+}
+
 struct FindWindowState
 {
     const wchar_t * exe_name;
     DWORD self_pid;
-    HWND visible;   /* first visible, unowned top-level window */
-    HWND any;       /* first unowned top-level window, visible or not */
+    HWND visible; /* first visible, unowned top-level window */
+    HWND any;     /* first unowned top-level window, visible or not */
 };
 
 static BOOL CALLBACK find_window_cb(HWND hwnd, LPARAM param)
@@ -142,55 +186,132 @@ static BOOL CALLBACK find_window_cb(HWND hwnd, LPARAM param)
     return TRUE;
 }
 
-static void activate_existing_window()
+struct FindOwnState
 {
-    wchar_t self_path[MAX_PATH];
-    DWORD size = GetModuleFileNameW(nullptr, self_path, MAX_PATH);
-    if (!size || size >= MAX_PATH)
-        return;
+    DWORD self_pid;
+    HWND result;
+};
 
-    const wchar_t * self_name = wcsrchr(self_path, L'\\');
-    self_name = self_name ? self_name + 1 : self_path;
+static BOOL CALLBACK find_own_cb(HWND hwnd, LPARAM param)
+{
+    auto state = (FindOwnState *) param;
 
-    FindWindowState state = {self_name, GetCurrentProcessId(), nullptr,
-                             nullptr};
-    EnumWindows(find_window_cb, (LPARAM) &state);
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != state->self_pid || GetWindow(hwnd, GW_OWNER) ||
+        !IsWindowVisible(hwnd))
+        return TRUE;
 
-    HWND hwnd = state.visible ? state.visible : state.any;
-    if (!hwnd)
-        return;
+    state->result = hwnd;
+    return FALSE;
+}
 
-    /* Bring the window back without changing its state.  A plain SW_SHOW
-     * would un-maximize a maximized window, so pick the show command that
-     * matches the current placement: a maximized window stays maximized, a
-     * minimized one is restored, and a normal one is simply shown. */
-    WINDOWPLACEMENT wp;
-    wp.length = sizeof(WINDOWPLACEMENT);
-    GetWindowPlacement(hwnd, &wp);
+/* Raises our own main window (we are running in the instance that owns it). */
+static void activate_own_window()
+{
+    FindOwnState state = {GetCurrentProcessId(), nullptr};
+    EnumWindows(find_own_cb, (LPARAM) &state);
+    raise_window(state.result);
+}
 
-    if (wp.showCmd == SW_SHOWMINIMIZED)
-        ShowWindow(hwnd, SW_RESTORE);
-    else if (wp.showCmd == SW_SHOWMAXIMIZED)
-        ShowWindow(hwnd, SW_SHOWMAXIMIZED);
+/* ------------------------------------------------------------------ *
+ * IPC: a hidden top-level window of a well-known class name receives a
+ * WM_COPYDATA message carrying the command line of a later launch.
+ * ------------------------------------------------------------------ */
+
+static const uint32_t ipc_magic = 0x41554431; /* "AUD1" */
+
+static wchar_t ipc_class[64];
+static HWND ipc_hwnd = nullptr;
+static QueuedFunc ipc_queued;
+
+static void ipc_class_name(int instance)
+{
+    if (instance == 1)
+        wcscpy(ipc_class, L"AudaciousIPC");
     else
-        ShowWindow(hwnd, SW_SHOW);
+        swprintf(ipc_class, 64, L"AudaciousIPC-%d", instance);
+}
 
-    /* SetForegroundWindow() is only permitted for the foreground process, so
-     * briefly attach our input queue to the current foreground thread. */
-    HWND foreground = GetForegroundWindow();
-    DWORD foreground_thread =
-        foreground ? GetWindowThreadProcessId(foreground, nullptr) : 0;
-    DWORD current_thread = GetCurrentThreadId();
+/* Runs in the main thread (queued from the window procedure). */
+static void ipc_apply(Win32IpcMode mode, const std::vector<std::string> & files)
+{
+    if (!files.empty())
+    {
+        Index<PlaylistAddItem> items;
 
-    bool attached = foreground_thread &&
-                    foreground_thread != current_thread &&
-                    AttachThreadInput(current_thread, foreground_thread, TRUE);
+        for (auto & file : files)
+            items.append(String(file.c_str()));
 
-    SetForegroundWindow(hwnd);
-    BringWindowToTop(hwnd);
+        if (mode == Win32IpcMode::Enqueue)
+            aud_drct_pl_add_list(std::move(items), -1);
+        else if (mode == Win32IpcMode::EnqueueToTemp)
+            aud_drct_pl_open_temp_list(std::move(items));
+        else
+            aud_drct_pl_open_list(std::move(items));
+    }
 
-    if (attached)
-        AttachThreadInput(current_thread, foreground_thread, FALSE);
+    /* Make sure the user actually sees the result. */
+    aud_ui_show(true);
+    activate_own_window();
+}
+
+/* Payload layout: u32 magic, u32 mode, u32 count,
+ * then count x (u32 length, length bytes of UTF-8). */
+static void ipc_handle(const void * data, size_t len)
+{
+    auto p = (const unsigned char *) data;
+    const unsigned char * end = p + len;
+
+    auto get_u32 = [&p, end](uint32_t & value) -> bool {
+        if ((size_t)(end - p) < sizeof(uint32_t))
+            return false;
+
+        memcpy(&value, p, sizeof(uint32_t));
+        p += sizeof(uint32_t);
+        return true;
+    };
+
+    uint32_t magic, mode, count;
+    if (!get_u32(magic) || magic != ipc_magic || !get_u32(mode) ||
+        !get_u32(count))
+        return;
+
+    std::vector<std::string> files;
+
+    for (uint32_t i = 0; i < count; i++)
+    {
+        uint32_t length;
+        if (!get_u32(length) || (size_t)(end - p) < (size_t) length)
+            return;
+
+        files.emplace_back((const char *) p, (size_t) length);
+        p += length;
+    }
+
+    if (mode > (uint32_t) Win32IpcMode::EnqueueToTemp)
+        mode = (uint32_t) Win32IpcMode::Open;
+
+    AUDINFO("Forwarded command received: mode %d, %d file(s).\n", (int) mode,
+            (int) files.size());
+
+    ipc_queued.queue([mode, files]() {
+        ipc_apply((Win32IpcMode) mode, files);
+    });
+}
+
+static LRESULT CALLBACK ipc_wnd_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+{
+    if (msg == WM_COPYDATA)
+    {
+        auto cds = (const COPYDATASTRUCT *) lp;
+        if (cds && cds->lpData && cds->cbData)
+            ipc_handle(cds->lpData, cds->cbData);
+
+        return TRUE;
+    }
+
+    return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
 } /* namespace */
@@ -206,15 +327,116 @@ bool win32_claim_single_instance(int instance)
 
     single_instance_mutex = CreateMutexW(nullptr, FALSE, name);
 
-    if (single_instance_mutex && GetLastError() == ERROR_ALREADY_EXISTS)
+    return !(single_instance_mutex &&
+             GetLastError() == ERROR_ALREADY_EXISTS);
+}
+
+void win32_activate_existing_instance()
+{
+    wchar_t self_path[MAX_PATH];
+    DWORD size = GetModuleFileNameW(nullptr, self_path, MAX_PATH);
+    if (!size || size >= MAX_PATH)
+        return;
+
+    const wchar_t * self_name = wcsrchr(self_path, L'\\');
+    self_name = self_name ? self_name + 1 : self_path;
+
+    FindWindowState state = {self_name, GetCurrentProcessId(), nullptr,
+                             nullptr};
+    EnumWindows(find_window_cb, (LPARAM) &state);
+
+    raise_window(state.visible ? state.visible : state.any);
+}
+
+void win32_ipc_start(int instance)
+{
+    if (ipc_hwnd)
+        return;
+
+    ipc_class_name(instance);
+
+    HINSTANCE hinst = GetModuleHandleW(nullptr);
+
+    WNDCLASSEXW wc = {};
+    wc.cbSize = sizeof(wc);
+    wc.lpfnWndProc = ipc_wnd_proc;
+    wc.hInstance = hinst;
+    wc.lpszClassName = ipc_class;
+    RegisterClassExW(&wc);
+
+    /* Hidden (never shown) top-level window, so that FindWindowW() can locate
+     * it from another process. */
+    ipc_hwnd =
+        CreateWindowExW(0, ipc_class, L"Audacious IPC", 0, 0, 0, 0, 0,
+                        nullptr, nullptr, hinst, nullptr);
+}
+
+void win32_ipc_stop()
+{
+    ipc_queued.stop();
+
+    if (ipc_hwnd)
     {
-        /* Another copy is already running for this instance number: bring its
-         * window to the front instead of opening a second one. */
-        activate_existing_window();
-        return false;
+        DestroyWindow(ipc_hwnd);
+        ipc_hwnd = nullptr;
     }
 
-    return true;
+    if (ipc_class[0])
+    {
+        UnregisterClassW(ipc_class, GetModuleHandleW(nullptr));
+        ipc_class[0] = 0;
+    }
+}
+
+bool win32_ipc_send(int instance, Win32IpcMode mode,
+                    const Index<String> & files)
+{
+    wchar_t name[64];
+
+    if (instance == 1)
+        wcscpy(name, L"AudaciousIPC");
+    else
+        swprintf(name, 64, L"AudaciousIPC-%d", instance);
+
+    /* The primary instance may still be starting up. */
+    HWND hwnd = nullptr;
+    for (int i = 0; i < 50 && !hwnd; i++)
+    {
+        hwnd = FindWindowW(name, nullptr);
+        if (!hwnd)
+            Sleep(100);
+    }
+
+    if (!hwnd)
+        return false;
+
+    std::string buf;
+
+    auto put_u32 = [&buf](uint32_t value) {
+        buf.append((const char *) &value, sizeof(value));
+    };
+
+    put_u32(ipc_magic);
+    put_u32((uint32_t) mode);
+    put_u32((uint32_t) files.len());
+
+    for (auto & file : files)
+    {
+        size_t length = strlen(file);
+        put_u32((uint32_t) length);
+        buf.append((const char *) file, length);
+    }
+
+    COPYDATASTRUCT cds;
+    cds.dwData = ipc_magic;
+    cds.cbData = (DWORD) buf.size();
+    cds.lpData = (void *) buf.data();
+
+    DWORD_PTR result = 0;
+    SendMessageTimeoutW(hwnd, WM_COPYDATA, (WPARAM) nullptr, (LPARAM) &cds,
+                        SMTO_ABORTIFHUNG, 5000, &result);
+
+    return result != 0;
 }
 
 #endif
