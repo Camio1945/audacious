@@ -308,7 +308,7 @@ static void do_commands()
             aud_drct_pl_add_list(std::move(filenames), -1);
         else
         {
-            aud_drct_pl_open_list(std::move(filenames));
+            aud_drct_pl_add_to_now_playing(std::move(filenames));
             resume = false;
         }
     }
@@ -408,9 +408,12 @@ int main(int argc, char ** argv)
         for (auto & item : filenames)
             uris.append(item.filename);
 
+        /* A plain "audacious.exe <file>" (i.e. a double-click in Explorer) adds
+         * the file to the "Now Playing" list without interrupting whatever is
+         * already playing. */
         auto mode = options.enqueue_to_temp ? Win32IpcMode::EnqueueToTemp
                     : options.enqueue        ? Win32IpcMode::Enqueue
-                                             : Win32IpcMode::Open;
+                                             : Win32IpcMode::NowPlaying;
 
         if (!win32_ipc_send(aud_get_instance(), mode, uris))
         {

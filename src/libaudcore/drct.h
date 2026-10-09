@@ -108,4 +108,13 @@ void aud_drct_pl_open_list(Index<PlaylistAddItem> && items);
 void aud_drct_pl_open_temp(const char * filename);
 void aud_drct_pl_open_temp_list(Index<PlaylistAddItem> && items);
 
+/* Appends "items" to the playlist that is currently playing (the "Now Playing"
+ * list); if nothing is playing yet, the playlist actually named "Now Playing"
+ * is used instead.  Items that are already in that playlist are skipped.
+ *
+ * Playback is never interrupted: when a song is already playing, the items are
+ * merely appended behind it.  Only when nothing is playing does playback of
+ * the first added item start, and then only once it has finished being added. */
+void aud_drct_pl_add_to_now_playing(Index<PlaylistAddItem> && items);
+
 #endif

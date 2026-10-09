@@ -247,6 +247,8 @@ static void ipc_apply(Win32IpcMode mode, const std::vector<std::string> & files)
             aud_drct_pl_add_list(std::move(items), -1);
         else if (mode == Win32IpcMode::EnqueueToTemp)
             aud_drct_pl_open_temp_list(std::move(items));
+        else if (mode == Win32IpcMode::NowPlaying)
+            aud_drct_pl_add_to_now_playing(std::move(items));
         else
             aud_drct_pl_open_list(std::move(items));
     }
@@ -289,7 +291,7 @@ static void ipc_handle(const void * data, size_t len)
         p += length;
     }
 
-    if (mode > (uint32_t) Win32IpcMode::EnqueueToTemp)
+    if (mode > (uint32_t) Win32IpcMode::NowPlaying)
         mode = (uint32_t) Win32IpcMode::Open;
 
     AUDINFO("Forwarded command received: mode %d, %d file(s).\n", (int) mode,

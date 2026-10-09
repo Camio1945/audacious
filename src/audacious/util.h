@@ -41,7 +41,9 @@ enum class Win32IpcMode
 {
     Open,
     Enqueue,
-    EnqueueToTemp
+    EnqueueToTemp,
+    /* Add to the "Now Playing" list without interrupting the current song. */
+    NowPlaying
 };
 
 /* Primary instance only: creates the hidden window that receives forwarded

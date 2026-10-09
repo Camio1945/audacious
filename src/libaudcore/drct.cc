@@ -28,6 +28,8 @@
 #include "runtime.h"
 #include "tuple.h"
 
+#include <string.h>
+
 /* --- PLAYBACK CONTROL --- */
 
 EXPORT void aud_drct_play()
@@ -272,4 +274,108 @@ EXPORT void aud_drct_pl_open_temp(const char * filename)
 EXPORT void aud_drct_pl_open_temp_list(Index<PlaylistAddItem> && items)
 {
     add_list(std::move(items), -1, true, true);
+}
+
+/* --- ADD TO NOW PLAYING --- */
+
+/* A request to start playback once the background add triggered by
+ * aud_drct_pl_add_to_now_playing() has finished.  Only one such request can be
+ * pending at a time; a newer one replaces an older one. */
+static Playlist now_playing_playlist;
+static int now_playing_entry = -1;
+
+/* Runs on the main thread after an add has been inserted. */
+static void now_playing_ready(void *, void *)
+{
+    Playlist playlist = now_playing_playlist;
+    int entry = now_playing_entry;
+
+    now_playing_playlist = Playlist();
+    now_playing_entry = -1;
+
+    hook_dissociate("playlist add complete", now_playing_ready);
+
+    if (!playlist.exists() || entry < 0 || entry >= playlist.n_entries())
+        return;
+
+    /* The user may have started something else while we were adding. */
+    if (aud_drct_get_playing())
+        return;
+
+    playlist.set_position(entry);
+    playlist.start_playback();
+}
+
+/* Returns the number of the first entry referring to "filename", or -1. */
+static int find_playlist_entry(const Playlist & playlist, const char * filename)
+{
+    for (int entry = 0; entry < playlist.n_entries(); entry++)
+    {
+        String existing = playlist.entry_filename(entry);
+        if (existing && !strcmp(existing, filename))
+            return entry;
+    }
+
+    return -1;
+}
+
+EXPORT void aud_drct_pl_add_to_now_playing(Index<PlaylistAddItem> && items)
+{
+    if (!items.len())
+        return;
+
+    bool playing = aud_drct_get_playing();
+
+    /* The "Now Playing" list is whichever list is currently playing; if nothing
+     * is playing yet, it is the playlist actually named "Now Playing". */
+    Playlist playlist = Playlist::playing_playlist();
+    if (!playlist.exists())
+        playlist = Playlist::temporary_playlist();
+
+    String first = items[0].filename;
+
+    /* Skip files that are already in the list. */
+    Index<PlaylistAddItem> fresh;
+    for (auto & item : items)
+    {
+        if (find_playlist_entry(playlist, item.filename) < 0)
+            fresh.append(std::move(item));
+    }
+
+    /* Where the first new entry will land.  Note that insert_items() empties
+     * "fresh", so remember now whether there is anything to add. */
+    int first_new = playlist.n_entries();
+    bool added = fresh.len() > 0;
+
+    if (added)
+    {
+        playlist.activate();
+        playlist.insert_items(-1, std::move(fresh), false);
+    }
+
+    if (playing)
+        return; /* keep listening to the current song */
+
+    if (added)
+    {
+        /* Start the new file once the background add finishes.  The "play"
+         * argument of insert_items() cannot be used here, because it would wipe
+         * the playlist and the queue before inserting. */
+        now_playing_playlist = playlist;
+        now_playing_entry = first_new;
+
+        hook_dissociate("playlist add complete", now_playing_ready);
+        hook_associate("playlist add complete", now_playing_ready, nullptr);
+    }
+    else
+    {
+        /* Nothing new to add: play the requested file where it already is. */
+        int entry = find_playlist_entry(playlist, first);
+        if (entry >= 0)
+        {
+            playlist.activate();
+            playlist.set_position(entry);
+            playlist.start_playback();
+        }
+    }
 }
