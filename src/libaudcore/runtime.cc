@@ -288,6 +288,28 @@ EXPORT void aud_init_i18n()
 {
     const char * localedir = aud_get_path(AudPath::LocaleDir);
 
+    /* Load the config file early so the saved interface language can be
+     * applied below, before gettext selects its message catalogs.
+     * config_load() runs again in aud_init(); running it twice is harmless. */
+    config_load();
+
+    String lang = aud_get_str("audqt", "language");
+
+    /* First run: adopt the system language as the initial choice, so that
+     * the language selector in the settings always reflects the actual
+     * interface language. */
+    if (! lang[0])
+    {
+        const char * const * syslangs = g_get_language_names();
+        lang = String((syslangs[0] && ! strncmp(syslangs[0], "zh", 2))
+                      ? "zh_CN" : "en");
+        aud_set_str_no_notify("audqt", "language", lang);
+    }
+
+    /* $LANGUAGE overrides the gettext message catalog selection only;
+     * the system locale (formats, encoding) is left untouched. */
+    g_setenv("LANGUAGE", lang, true);
+
     setlocale(LC_ALL, "");
     bindtextdomain(PACKAGE, localedir);
     bind_textdomain_codeset(PACKAGE, "UTF-8");

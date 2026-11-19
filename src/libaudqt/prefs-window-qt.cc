@@ -259,6 +259,11 @@ static void icon_theme_changed()
         w->update();
 }
 
+static const ComboItem language_elements[] = {ComboItem("English", "en"),
+                                              ComboItem("简体中文", "zh_CN")};
+
+static void language_changed() { aud_request_restart(); }
+
 static const PreferencesWidget appearance_page_widgets[] = {
     WidgetLabel(N_("Audacious is running in Qt mode.")),
 #ifdef USE_GTK
@@ -275,6 +280,9 @@ static const PreferencesWidget appearance_page_widgets[] = {
     WidgetCombo(N_("Icon theme:"),
                 WidgetString("audqt", "icon_theme", icon_theme_changed),
                 {{icon_theme_elements}}),
+    WidgetCombo(N_("Language:"),
+                WidgetString("audqt", "language", language_changed),
+                {{language_elements}}),
     WidgetSeparator({true}),
     WidgetCustomQt(iface_create_prefs_box)};
 

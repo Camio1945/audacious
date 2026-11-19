@@ -55,6 +55,12 @@ void win32_ipc_stop();
  * window.  Returns false if the running instance could not be reached. */
 bool win32_ipc_send(int instance, Win32IpcMode mode,
                     const Index<String> & files);
+
+/* Captures the media keys system-wide while a song is playing or paused, so
+ * that Play/Pause keeps working even when another window has the focus.  The
+ * keys are released again on playback stop. */
+void win32_media_keys_start();
+void win32_media_keys_stop();
 #endif
 
 #endif /* AUDACIOUS_UTIL_H */

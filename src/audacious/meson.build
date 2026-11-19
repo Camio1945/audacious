@@ -23,6 +23,7 @@ if have_windows
   audacious_sources += windows.compile_resources('audacious.rc',
     include_directories: meson.current_build_dir()
   )
+  audacious_sources += ['media-keys.cc']
 
   if meson.version().version_compare('>= 0.56')
     audacious_kwargs += {'win_subsystem': 'windows'}

@@ -440,7 +440,10 @@ int main(int argc, char ** argv)
 
 #ifdef _WIN32
     if (single_instance)
+    {
         win32_ipc_start(aud_get_instance());
+        win32_media_keys_start();
+    }
 #endif
 
     do_commands();
@@ -464,7 +467,10 @@ int main(int argc, char ** argv)
 
 #ifdef _WIN32
     if (single_instance)
+    {
+        win32_media_keys_stop();
         win32_ipc_stop();
+    }
 #endif
 
 #ifdef USE_DBUS

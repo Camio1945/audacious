@@ -1624,6 +1624,10 @@ msgstr "主题："
 msgid "Icon theme:"
 msgstr "图标主题："
 
+#: src/libaudqt/prefs-window-qt.cc:281
+msgid "Language:"
+msgstr "语言："
+
 #: src/libaudqt/util-qt.cc:113
 msgid "Copy"
 msgstr "复制"
