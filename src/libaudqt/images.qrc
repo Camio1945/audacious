@@ -54,6 +54,7 @@
     <file alias="media-playback-start.svg">../../images/media-playback-start.svg</file>
     <file alias="media-playback-stop.svg">../../images/media-playback-stop.svg</file>
     <file alias="media-playlist-repeat.svg">../../images/media-playlist-repeat.svg</file>
+    <file alias="media-playlist-repeat-song.svg">../../images/media-playlist-repeat-song.svg</file>
     <file alias="media-playlist-shuffle.svg">../../images/media-playlist-shuffle.svg</file>
     <file alias="media-record.svg">../../images/media-record.svg</file>
     <file alias="media-skip-backward.svg">../../images/media-skip-backward.svg</file>
@@ -120,6 +121,7 @@
     <file alias="media-playback-start.svg">../../images/dark/media-playback-start.svg</file>
     <file alias="media-playback-stop.svg">../../images/dark/media-playback-stop.svg</file>
     <file alias="media-playlist-repeat.svg">../../images/dark/media-playlist-repeat.svg</file>
+    <file alias="media-playlist-repeat-song.svg">../../images/dark/media-playlist-repeat-song.svg</file>
     <file alias="media-playlist-shuffle.svg">../../images/dark/media-playlist-shuffle.svg</file>
     <file alias="media-record.svg">../../images/dark/media-record.svg</file>
     <file alias="media-skip-backward.svg">../../images/dark/media-skip-backward.svg</file>

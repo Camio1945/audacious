@@ -1,5 +1,42 @@
 # Audacious [v4.6.3]
 
+## Development Mode (PowerShell)
+
+For day-to-day development: build and install into `release-qt`, then run the exe directly. No runtime DLL copying, NSIS installer, or portable zip is needed.
+
+```powershell
+# ===== 0. Environment (always use a clean PATH) =====
+$msysRoot = "F:\msys64"
+$env:Path = "$msysRoot\usr\bin;$msysRoot\ucrt64\bin;C:\Windows\System32;C:\Windows"
+$audRoot  = "D:\git\miscellaneous\audacious"
+$plugRoot = "D:\git\miscellaneous\audacious-plugins"
+$prefix   = "$audRoot\release-qt"
+
+# ===== 1. First-time setup only (skip if build\ already exists) =====
+cd $audRoot
+meson setup build -D gtk=false -D dbus=false -D prefix=$prefix
+
+cd $plugRoot
+$env:PKG_CONFIG_PATH = "$prefix\lib\pkgconfig"
+meson setup build -D prefix=$prefix -D gtk=false -D gtkui=false -D skins=false
+
+# ===== 2. Incremental build + install (run after each code change) =====
+cd $audRoot
+meson compile -C build
+meson install -C build
+
+cd $plugRoot
+$env:PKG_CONFIG_PATH = "$prefix\lib\pkgconfig"
+meson compile -C build
+meson install -C build
+
+# ===== 3. Run =====
+cd $prefix\bin
+.\audacious.exe
+```
+
+> Keep the PATH overwrite: appending the system PATH lets MSVC GStreamer DLLs contaminate the GCC link and produces a broken exe.
+
 ## 快速打包与运行（Windows MSYS2 UCRT64）
 
 ### 前置环境
